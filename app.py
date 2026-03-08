@@ -191,7 +191,7 @@ st.markdown('<div class="zen-title">三世因果问答</div>', unsafe_allow_html
 # 登录状态栏
 if st.session_state.user_uid:
     st.markdown(f"<div style='text-align: right; color: #8a7b66; font-size: 0.9rem;'>已登录: {st.session_state.user_email}</div>", unsafe_allow_html=True)
-    if st.button("退出登录", size="small"):
+    if st.button("退出登录"): # 修复：移除了不支持的 size="small" 参数
         logout()
         st.rerun()
 else:
