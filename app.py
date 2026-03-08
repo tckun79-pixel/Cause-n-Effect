@@ -113,7 +113,6 @@ KARMA_DATA = [
     }
 ]
 
-# 完整的简体经文
 FULL_TEXT = [
     "尔时。阿难陀尊者。在灵山会上。一千二百五十人俱。阿难顶礼合掌。绕佛三匝。胡跪合掌。请问本师释迦牟尼佛。南阎浮提。一切众生。末法时至。多生不善。不敬三宝。不重父母。无有三纲。五伦杂乱。贫穷下贱。六根不足。终日杀生害命。富贵贫穷。亦不平等。是何果报。望世尊慈悲。愿为弟子一一解说。",
     "佛告阿难。与诸大弟子言。善哉。善哉。汝等谛听。吾当为汝等分明说之。一切世间。男女老少。贫贱富贵。受苦无穷。享福不尽。皆是前生因果之报。以何所作故。先须孝敬父母。次要敬信三宝。三要戒杀放生。四要念佛布施。能种后世福田。",
@@ -214,18 +213,18 @@ with tab1:
         res = search_karma(user_query)
         st.markdown(f"<div class='verse-box'><h3 style='color: #4a3f31;'>{res['question']}</h3><div class='verse-text'>“ {res['verse']} ”</div></div><div class='explanation-box'><b>现代启示：</b><br><br>{res['explanation']}</div>", unsafe_allow_html=True)
 
-# Auth 拦截器：如果未登录，Tab 2 和 Tab 4 显示登录提示
-def require_auth():
+# 增加 key_prefix 解决组件 ID 重复问题
+def require_auth(key_prefix):
     if not FIREBASE_WEB_API_KEY:
         st.error("系统未配置 FIREBASE_WEB_API_KEY，无法启用登录功能。")
         return False
     if not st.session_state.user_uid:
         st.warning("🔒 此功能需要登录后方可使用（数据将为您加密隔离）。")
         with st.expander("👉 点击此处 登录 / 注册", expanded=True):
-            auth_mode = st.radio("选择操作", ["登录", "注册新账号"], horizontal=True)
-            auth_email = st.text_input("电子邮箱")
-            auth_pwd = st.text_input("密码", type="password")
-            if st.button("确认提交"):
+            auth_mode = st.radio("选择操作", ["登录", "注册新账号"], horizontal=True, key=f"{key_prefix}_mode")
+            auth_email = st.text_input("电子邮箱", key=f"{key_prefix}_email")
+            auth_pwd = st.text_input("密码", type="password", key=f"{key_prefix}_pwd")
+            if st.button("确认提交", key=f"{key_prefix}_submit"):
                 if auth_mode == "注册新账号":
                     res = sign_up_with_email(auth_email, auth_pwd)
                     if "error" in res:
@@ -246,7 +245,7 @@ def require_auth():
 
 # Tab 2: AI 大师 (需登录)
 with tab2:
-    if require_auth():
+    if require_auth("ai_tab"):
         st.info("💡 结合您的生活背景，向 AI 大师请教深度因果解析。")
         ai_query = st.text_area("您的困惑：", placeholder="例如：今天期权交易止损了，产生了懊恼情绪，如何用因果智慧化解？")
         if st.button("请大师解惑", type="primary"):
@@ -266,7 +265,7 @@ with tab3:
 
 # Tab 4: 福田日记 (需登录，数据隔离)
 with tab4:
-    if require_auth():
+    if require_auth("diary_tab"):
         if db is None:
             st.error("⚠️ Firebase 数据库连接失败。")
         else:
@@ -306,7 +305,7 @@ with tab4:
                 docs = db.collection("merit_logs").where("uid", "==", st.session_state.user_uid).stream()
                 
                 records = [doc.to_dict() for doc in docs]
-                # 在 Python 端按时间倒序排列，避免需要在 Firestore 配置复合索引
+                # 在 Python 端按时间倒序排列
                 records.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
                 
                 if not records:
