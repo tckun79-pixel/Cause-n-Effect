@@ -12,54 +12,18 @@ st.set_page_config(
     layout="centered"
 )
 
-# 注入自定义 CSS 增加一点禅意风格 (Serif 字体，柔和色彩)
+# 注入自定义 CSS 增加一点禅意风格
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;700&display=swap');
     
-    html, body, [class*="css"]  {
-        font-family: 'Noto Serif SC', serif;
-    }
-    .stApp {
-        background-color: #f9f6f0;
-    }
-    .zen-title {
-        text-align: center;
-        color: #4a3f31;
-        font-size: 2.5rem;
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-        letter-spacing: 0.1em;
-    }
-    .zen-subtitle {
-        text-align: center;
-        color: #6b5c4a;
-        font-size: 1.1rem;
-        margin-bottom: 2rem;
-    }
-    .verse-box {
-        background-color: #ffffff;
-        padding: 2rem;
-        border-radius: 10px;
-        border: 1px solid #eee8df;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin-bottom: 1.5rem;
-        text-align: center;
-    }
-    .verse-text {
-        font-size: 1.5rem;
-        color: #635540;
-        font-weight: bold;
-        margin: 1rem 0;
-    }
-    .explanation-box {
-        background-color: #fcfaf7;
-        padding: 1.5rem;
-        border-radius: 8px;
-        border: 1px solid #f5f0e6;
-        color: #5c4f3c;
-        line-height: 1.6;
-    }
+    html, body, [class*="css"]  { font-family: 'Noto Serif SC', serif; }
+    .stApp { background-color: #f9f6f0; }
+    .zen-title { text-align: center; color: #4a3f31; font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem; letter-spacing: 0.1em; }
+    .zen-subtitle { text-align: center; color: #6b5c4a; font-size: 1.1rem; margin-bottom: 2rem; }
+    .verse-box { background-color: #ffffff; padding: 2rem; border-radius: 10px; border: 1px solid #eee8df; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 1.5rem; text-align: center; }
+    .verse-text { font-size: 1.5rem; color: #635540; font-weight: bold; margin: 1rem 0; }
+    .explanation-box { background-color: #fcfaf7; padding: 1.5rem; border-radius: 8px; border: 1px solid #f5f0e6; color: #5c4f3c; line-height: 1.6; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -98,12 +62,7 @@ FULL_TEXT = [
     "佛告阿难，与诸大弟子言，善哉！善哉！汝等谛听，吾当为汝等分明说之。一切世间，男女老少，贫贱富贵，受苦无穷，享福不尽，皆是前生因果之报。以何所作故？先须孝敬父母，敬信三宝，次要戒杀放生，念佛布施，能种后世福田。",
     "佛说因果偈云：",
     "富贵皆由命，前世各修因。有人受持者，世世福禄深。",
-    "欲知前世因，今生受者是。欲知来世果，今生作者是。",
-    "今生做官为何因，前世黄金装佛身。今生受苦为何因，前世不肯敬佛僧。",
-    "今生富贵为何因，前世斋僧济穷人。今生无食无穿者，前世不舍半分文。",
-    "今生聪明智慧者，前世诵经念佛人。今生娇妻妾美者，前世佛门多结缘。",
-    "今生鳏寡孤独者，前世轻视抛弃人。今生病苦多灾者，前世杀生害命人。",
-    "今生健康长寿者，前世买物放生人。今生乘车坐轿者，前世修桥补路人。"
+    "欲知前世因，今生受者是。欲知来世果，今生作者是。"
 ]
 
 # ==========================================
@@ -111,8 +70,7 @@ FULL_TEXT = [
 # ==========================================
 def search_karma(query):
     query = query.lower().strip()
-    if not query:
-        return None
+    if not query: return None
     for item in KARMA_DATA:
         if any(kw in query for kw in item['keywords']) or query in item['question']:
             return item
@@ -123,39 +81,42 @@ def search_karma(query):
     }
 
 def call_ai_master(prompt):
-    # 尝试从 Streamlit Secrets 中获取 API Key
+    # 1. 检查 API Key 是否配置
     try:
         api_key = st.secrets["GEMINI_API_KEY"]
+        if not api_key or api_key == "您申请的真实API_KEY":
+            return "❌ 错误：检测到无效的 API 密钥。请在 Streamlit Cloud 右下角 Settings -> Secrets 中填入您真实的 GEMINI_API_KEY。"
     except Exception:
-        return "错误：未配置 API 密钥。请在 Streamlit Cloud 的 Secrets 中设置 GEMINI_API_KEY。"
+        return "❌ 错误：未在 Streamlit Cloud 中找到 Secrets 配置。请前往 Settings -> Secrets 增加配置。"
     
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
     system_instruction = """你是一位精通佛教《三世因果经》的智者。请根据用户的问题给出解答。
     严格遵守以下原则：
-    1. 【核心依据】：所有解答必须以《三世因果经》的核心原理（善恶业报、布施、放生、修桥补路等）为基础。
+    1. 【核心依据】：所有解答必须以《三世因果经》的核心原理为基础。
     2. 【中立客观】：态度必须客观、平和、中立。严禁夸大其词，严禁使用恐吓、迷信、绝对化的语言。
-    3. 【现代语境】：如果用户询问现代事物（如股票期权交易、科技研发、现代教育等），请提取经文背后的“核心原则”（如：不贪心、利他心、智慧）进行理性映射解释，不要生搬硬套或捏造经文。
-    4. 【结构清晰】：回答分为两部分。第一部分：引用一句最贴切的《三世因果经》原句或总结其核心偈语；第二部分：给出客观、理性的现代白话解析。"""
+    3. 【现代语境】：如果用户询问现代事物，请提取经文背后的“核心原则”（如：不贪心、利他心）进行理性解释。
+    4. 【结构清晰】：第一部分引用最贴切的《三世因果经》原句；第二部分给出客观理性的现代白话解析。"""
 
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "systemInstruction": {"parts": [{"text": system_instruction}]}
     }
-    
     headers = {"Content-Type": "application/json"}
     
-    # 简单重试逻辑
-    for _ in range(3):
-        try:
-            response = requests.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "大师沉默不语。")
-        except Exception as e:
-            time.sleep(2)
-            continue
-    return "网络连接异常，大师正在闭关，请稍后再试。"
+    # 2. 发起请求并捕获真实错误
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        
+        # 如果 HTTP 状态码不是 200 (OK)，则返回具体的错误信息给前端
+        if not response.ok:
+            return f"❌ API 请求被拒绝 (状态码: {response.status_code})。服务器返回的详细信息：\n{response.text}"
+            
+        data = response.json()
+        return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "大师沉默不语（API未返回有效文本）。")
+        
+    except Exception as e:
+        return f"❌ 发生了不可预知的网络错误：{str(e)}"
 
 # ==========================================
 # UI 布局
@@ -165,11 +126,7 @@ st.markdown('<div class="zen-subtitle">🍃 明因果，知进退；修善业，
 
 tab1, tab2, tab3 = st.tabs(["💬 经典解惑", "✨ AI 大师", "📜 经文原典"])
 
-# --- Tab 1: 经典解惑 (静态搜索) ---
 with tab1:
-    st.write("搜索经典中对应的因果（例如：投资、工作、健康、孩子等）")
-    
-    # 快捷输入按钮
     col1, col2, col3, col4, col5 = st.columns(5)
     quick_query = None
     if col1.button("期权投资"): quick_query = "投资"
@@ -182,25 +139,19 @@ with tab1:
 
     if user_query:
         result = search_karma(user_query)
-        if result:
-            st.markdown(f"""
-            <div class="verse-box">
-                <h3 style="color: #4a3f31;">{result['question']}</h3>
-                <div class="verse-text">“ {result['verse']} ”</div>
-            </div>
-            <div class="explanation-box">
-                <b>现代启示：</b><br><br>{result['explanation']}
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.info("未找到完全匹配的预设内容，请尝试换个关键词，或前往【AI 大师】提问。")
+        st.markdown(f"""
+        <div class="verse-box">
+            <h3 style="color: #4a3f31;">{result['question']}</h3>
+            <div class="verse-text">“ {result['verse']} ”</div>
+        </div>
+        <div class="explanation-box">
+            <b>现代启示：</b><br><br>{result['explanation']}
+        </div>
+        """, unsafe_allow_html=True)
 
-# --- Tab 2: AI 大师 (动态调用) ---
 with tab2:
-    st.info("💡 AI 大师将基于《三世因果经》核心原理，以客观、理性的视角为您深度解析。")
-    
+    st.info("💡 AI 大师将基于《三世因果经》核心原理为您解析。")
     ai_query = st.text_area("请详细描述您的困惑：", placeholder="例如：作为听力设备测试工程师，我的工作在因果律中作何解？")
-    
     if st.button("请大师解惑", type="primary"):
         if ai_query:
             with st.spinner('大师正在沉思...'):
@@ -214,13 +165,8 @@ with tab2:
         else:
             st.warning("请先输入您的问题。")
 
-# --- Tab 3: 经文原典 ---
 with tab3:
     st.markdown('<div class="explanation-box">', unsafe_allow_html=True)
     for para in FULL_TEXT:
-        if "今生" in para:
-            st.markdown(f"> **{para}**")
-        else:
-            st.markdown(para)
+        st.markdown(f"> **{para}**" if "今生" in para else para)
     st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #a69986; margin-top: 2rem;'>愿以此功德，普及于一切。</p>", unsafe_allow_html=True)
