@@ -163,16 +163,21 @@ def search_karma(query):
             return item
     return {"question": f"关于“{query}”的参悟", "verse": "欲知前世因。今生受者是。欲知来世果。今生作者是。", "explanation": "存善心、行善事，就是为未来种下善因。若需更深解析，可前往【AI 大师】标签页请教。"}
 
-def call_ai_master(prompt):
+# 增加 use_background 参数控制是否融入背景
+def call_ai_master(prompt, use_background=False):
     try:
         api_key = st.secrets["GEMINI_API_KEY"]
     except Exception:
         return "❌ 缺少 Gemini API 密钥配置。"
     
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-    system_instruction = """精通佛教《三世因果经》的智者。严格遵守：
+    
+    # 根据用户勾选状态，动态改变系统提示词
+    bg_instruction = "结合用户(新加坡, IT/助听器, 期权交易, 7岁女儿, 蛋奶素)等背景进行理性映射。" if use_background else "仅针对用户当前的问题进行客观解答，不要生搬硬套任何未经提及的个人背景。"
+    
+    system_instruction = f"""精通佛教《三世因果经》的智者。严格遵守：
     1. 依据核心原理，使用简体中文。
-    2. 客观中立。结合用户(新加坡, IT/助听器, 期权交易, 7岁女儿, 蛋奶素)背景理性映射。不宣扬迷信。
+    2. 客观中立。{bg_instruction}不宣扬迷信。
     3. 第一部分引用原句，第二部分给出白话解析。"""
     
     payload = {"contents": [{"parts": [{"text": prompt}]}], "systemInstruction": {"parts": [{"text": system_instruction}]}}
@@ -191,7 +196,7 @@ st.markdown('<div class="zen-title">三世因果问答</div>', unsafe_allow_html
 # 登录状态栏
 if st.session_state.user_uid:
     st.markdown(f"<div style='text-align: right; color: #8a7b66; font-size: 0.9rem;'>已登录: {st.session_state.user_email}</div>", unsafe_allow_html=True)
-    if st.button("退出登录"): # 修复：移除了不支持的 size="small" 参数
+    if st.button("退出登录"): 
         logout()
         st.rerun()
 else:
@@ -213,7 +218,6 @@ with tab1:
         res = search_karma(user_query)
         st.markdown(f"<div class='verse-box'><h3 style='color: #4a3f31;'>{res['question']}</h3><div class='verse-text'>“ {res['verse']} ”</div></div><div class='explanation-box'><b>现代启示：</b><br><br>{res['explanation']}</div>", unsafe_allow_html=True)
 
-# 增加 key_prefix 解决组件 ID 重复问题
 def require_auth(key_prefix):
     if not FIREBASE_WEB_API_KEY:
         st.error("系统未配置 FIREBASE_WEB_API_KEY，无法启用登录功能。")
@@ -246,12 +250,16 @@ def require_auth(key_prefix):
 # Tab 2: AI 大师 (需登录)
 with tab2:
     if require_auth("ai_tab"):
-        st.info("💡 结合您的生活背景，向 AI 大师请教深度因果解析。")
-        ai_query = st.text_area("您的困惑：", placeholder="例如：今天期权交易止损了，产生了懊恼情绪，如何用因果智慧化解？")
+        st.info("💡 向 AI 大师请教深度因果解析。")
+        ai_query = st.text_area("您的困惑：", placeholder="例如：遇到了挫折，产生了懊恼情绪，如何用因果智慧化解？")
+        
+        # 新增：让用户选择是否融入个人背景的开关 (默认不勾选)
+        use_bg = st.checkbox("结合我的生活背景进行专属开示 (新加坡、IT、投资、素食等)", value=False)
+        
         if st.button("请大师解惑", type="primary"):
             if ai_query:
                 with st.spinner('大师正在沉思...'):
-                    ans = call_ai_master(ai_query)
+                    ans = call_ai_master(ai_query, use_background=use_bg)
                     st.markdown(f"<div class='explanation-box'><h3 style='color: #4a3f31; margin-top: 0;'>大师开示：</h3>{ans.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
 
 # Tab 3: 经文 (免登录可用)
@@ -284,7 +292,7 @@ with tab4:
                 if submitted and action_detail.strip():
                     timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M")
                     new_record = {
-                        "uid": st.session_state.user_uid, # 核心绑定 UID
+                        "uid": st.session_state.user_uid,
                         "email": st.session_state.user_email,
                         "category": category.split(" ")[0],
                         "action": action_detail,
