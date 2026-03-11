@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import json
 import base64
@@ -377,20 +378,79 @@ with tabs[3]:
     st.markdown("### 🎧 聆听经文")
     col1, col2 = st.columns([2, 1])
     voice_choice = col1.selectbox("选择朗读声音", ["温和女声", "沉稳男声", "清脆童声"], label_visibility="collapsed")
+    
     if col2.button("加载/播放朗读"):
         if not st.secrets.get("GCP_API_KEY") and not GEMINI_KEY:
             st.error("请在 Secrets 中配置 API_KEY 以启用朗读功能。")
         else:
             combined_text = "".join(FULL_TEXT)
             audio_b64 = get_cached_tts(voice_choice, combined_text)
+            
             if audio_b64:
-                audio_bytes = base64.b64decode(audio_b64)
-                st.audio(audio_bytes, format="audio/mp3")
-    
-    st.markdown("---")
+                # ==========================================
+                # 前端 JS 注入：实现基于时间比例的文字同步高亮
+                # ==========================================
+                
+                # 1. 将经文每个字用 span 包裹
+                wrapped_text_html = ""
+                for para in FULL_TEXT:
+                    if para.strip():
+                        wrapped_text_html += "<p>"
+                        for char in para:
+                            wrapped_text_html += f"<span class='tts-char'>{char}</span>"
+                        wrapped_text_html += "</p>"
 
-    for para in FULL_TEXT:
-        if para.strip():
-            st.markdown(f"{para}  ")
+                # 2. 构建包含播放器和同步逻辑的完整 HTML
+                sync_html = f"""
+                <style>
+                    .tts-player-container {{ margin-bottom: 20px; }}
+                    audio {{ width: 100%; outline: none; border-radius: 8px; }}
+                    .tts-text-box {{ font-family: 'Noto Serif SC', serif; font-size: 1.15rem; line-height: 2.0; color: #4a3f31; padding: 10px; }}
+                    .tts-char {{ transition: color 0.1s; }}
+                    /* 高亮样式：深橙色文字，配浅色背景烘托 */
+                    .highlighted {{ color: #d84315; font-weight: bold; background-color: #fbe9e7; border-radius: 2px; }}
+                </style>
+                
+                <div class="tts-player-container">
+                    <audio id="audio-player" controls autoplay src="data:audio/mp3;base64,{audio_b64}"></audio>
+                </div>
+                <div class="tts-text-box" id="text-container">
+                    {wrapped_text_html}
+                </div>
+                
+                <script>
+                    const audio = document.getElementById('audio-player');
+                    const spans = document.querySelectorAll('.tts-char');
+                    const totalChars = spans.length;
+
+                    audio.addEventListener('timeupdate', () => {{
+                        if (audio.duration) {{
+                            // 计算播放进度百分比
+                            const progress = audio.currentTime / audio.duration;
+                            // 线性估算当前读到的字数索引
+                            const targetIndex = Math.floor(progress * totalChars);
+
+                            // 遍历所有的字，点亮进度之前的字
+                            spans.forEach((span, index) => {{
+                                if (index <= targetIndex) {{
+                                    span.classList.add('highlighted');
+                                }} else {{
+                                    span.classList.remove('highlighted');
+                                }}
+                            }});
+                        }}
+                    }});
+                </script>
+                """
+                
+                # 在 Streamlit 中渲染这块带有 JS 的 HTML (提供足够的高度以防滚动)
+                components.html(sync_html, height=800, scrolling=True)
+    else:
+        # 默认静态显示经文
+        st.markdown("---")
+        for para in FULL_TEXT:
+            if para.strip():
+                st.markdown(f"{para}  ")
+                
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #a69986; margin-top: 2rem;'>愿以此功德，普及于一切。</p>", unsafe_allow_html=True)
