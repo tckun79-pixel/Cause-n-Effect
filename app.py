@@ -174,22 +174,44 @@ def synthesize_speech(text, voice_preset):
     }
     conf = presets.get(voice_preset, presets["温和女声"])
 
-    payload = {
-        "input": {"text": text},
-        "voice": {"languageCode": "cmn-CN", "name": conf["name"]},
-        "audioConfig": {"audioEncoding": "MP3", "pitch": conf["pitch"], "speakingRate": conf["rate"]}
-    }
+    # 将长文本切分为小块 (每块约 300 字)，防止触发 Google API 的 5000 字节限制和 500 内部错误
+    chunk_size = 300
+    chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+    
+    combined_audio_bytes = b""
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i, chunk in enumerate(chunks):
+        status_text.text(f"大师正在诵读... ({i+1}/{len(chunks)})")
+        payload = {
+            "input": {"text": chunk},
+            "voice": {"languageCode": "cmn-CN", "name": conf["name"]},
+            "audioConfig": {"audioEncoding": "MP3", "pitch": conf["pitch"], "speakingRate": conf["rate"]}
+        }
 
-    try:
-        res = requests.post(url, json=payload)
-        if res.ok:
-            return res.json().get("audioContent")
-        else:
-            st.error(f"TTS API 错误: {res.json().get('error', {}).get('message', res.text)}")
+        try:
+            res = requests.post(url, json=payload)
+            if res.ok:
+                audio_b64 = res.json().get("audioContent")
+                combined_audio_bytes += base64.b64decode(audio_b64)
+                progress_bar.progress((i + 1) / len(chunks))
+            else:
+                st.error(f"TTS API 错误 (分段 {i+1}): {res.json().get('error', {}).get('message', res.text)}")
+                status_text.empty()
+                progress_bar.empty()
+                return None
+        except Exception as e:
+            st.error(f"TTS 请求异常: {e}")
+            status_text.empty()
+            progress_bar.empty()
             return None
-    except Exception as e:
-        st.error(f"TTS 请求异常: {e}")
-        return None
+            
+    status_text.empty()
+    progress_bar.empty()
+    
+    return base64.b64encode(combined_audio_bytes).decode('utf-8')
 
 def get_cached_tts(voice_preset, full_text):
     if not db: 
@@ -204,6 +226,8 @@ def get_cached_tts(voice_preset, full_text):
     audio_b64 = synthesize_speech(full_text, voice_preset)
     if audio_b64:
         try:
+            # Firestore 限制单文档最大为 1MB。如果超限，try-except 会捕捉异常，
+            # 保证用户本次能正常听完整语音 (只是暂不缓存)
             cache_ref.set({"audio_b64": audio_b64, "timestamp": firestore.SERVER_TIMESTAMP})
         except:
             pass
