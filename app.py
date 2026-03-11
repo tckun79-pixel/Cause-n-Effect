@@ -340,10 +340,12 @@ with tabs[3]:
     st.markdown('<div class="verse-card" style="text-align: left; line-height: 2.0; font-size: 1.1rem;">', unsafe_allow_html=True)
     
     st.markdown("### 🎧 聆听经文")
-    col1, col2 = st.columns([2, 1])
+    # 将原来的两列 [2, 1] 改为三列 [2, 1, 1]，增加速度选项的空间
+    col1, col2, col3 = st.columns([2, 1, 1])
     voice_choice = col1.selectbox("选择朗读声音", ["温和女声", "沉稳男声", "清脆童声"], label_visibility="collapsed")
+    speed_choice = col2.selectbox("选择播放速度", ["1.0x", "1.5x", "2.0x"], index=0, label_visibility="collapsed")
     
-    if col2.button("加载/播放朗读"):
+    if col3.button("加载/播放朗读"):
         if not st.secrets.get("GCP_API_KEY") and not GEMINI_KEY:
             st.error("请在 Secrets 中配置 API_KEY 以启用朗读功能。")
         else:
@@ -352,6 +354,9 @@ with tabs[3]:
             audio_b64 = get_cached_tts(voice_choice, combined_text)
             
             if audio_b64:
+                # 提取数字速度值 (例如: "1.5x" -> 1.5)
+                speed_val = float(speed_choice.replace("x", ""))
+
                 # 页面展示使用空格版，高亮字符数依然一一对应
                 wrapped_text_html = ""
                 for para in FULL_TEXT_DISPLAY:
@@ -381,6 +386,10 @@ with tabs[3]:
                 
                 <script>
                     const audio = document.getElementById('audio-player');
+                    
+                    // 注入前端播放速度
+                    audio.playbackRate = {speed_val};
+
                     const spans = document.querySelectorAll('.tts-char');
                     const totalChars = spans.length;
 
