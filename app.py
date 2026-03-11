@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import json
+import base64
 from datetime import datetime
 
 # 1. 尝试导入并检查依赖
@@ -157,6 +158,58 @@ def call_ai_master(prompt, use_background=False):
         return f"❌ 网络错误：{str(e)}"
 
 # ==========================================
+# 朗读功能 (TTS)
+# ==========================================
+def synthesize_speech(text, voice_preset):
+    # 优先使用专门的 GCP_API_KEY，如果没有则尝试复用 GEMINI_KEY
+    api_key = st.secrets.get("GCP_API_KEY", GEMINI_KEY)
+    if not api_key: return None
+
+    url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={api_key}"
+
+    presets = {
+        "温和女声": {"name": "cmn-CN-Wavenet-A", "pitch": 0.0, "rate": 0.9},
+        "沉稳男声": {"name": "cmn-CN-Wavenet-B", "pitch": -2.0, "rate": 0.9},
+        "清脆童声": {"name": "cmn-CN-Wavenet-D", "pitch": 6.0, "rate": 1.1}
+    }
+    conf = presets.get(voice_preset, presets["温和女声"])
+
+    payload = {
+        "input": {"text": text},
+        "voice": {"languageCode": "cmn-CN", "name": conf["name"]},
+        "audioConfig": {"audioEncoding": "MP3", "pitch": conf["pitch"], "speakingRate": conf["rate"]}
+    }
+
+    try:
+        res = requests.post(url, json=payload)
+        if res.ok:
+            return res.json().get("audioContent")
+        else:
+            st.error(f"TTS API 错误: {res.json().get('error', {}).get('message', res.text)}")
+            return None
+    except Exception as e:
+        st.error(f"TTS 请求异常: {e}")
+        return None
+
+def get_cached_tts(voice_preset, full_text):
+    if not db: 
+        return synthesize_speech(full_text, voice_preset)
+        
+    cache_ref = db.collection("artifacts").document(APP_ID).collection("public").document("data").collection("tts_cache").document(voice_preset)
+    doc = cache_ref.get()
+    if doc.exists:
+        return doc.to_dict().get("audio_b64")
+
+    st.info("首次生成该声音的音频，正在调用 Google Cloud TTS，请稍候...")
+    audio_b64 = synthesize_speech(full_text, voice_preset)
+    if audio_b64:
+        try:
+            cache_ref.set({"audio_b64": audio_b64, "timestamp": firestore.SERVER_TIMESTAMP})
+        except:
+            pass
+    return audio_b64
+
+# ==========================================
 # 认证函数
 # ==========================================
 def auth_gate(key):
@@ -296,6 +349,22 @@ with tabs[2]:
 # --------- 标签 4: 经文 ---------
 with tabs[3]:
     st.markdown('<div class="verse-card" style="text-align: left; line-height: 2.0; font-size: 1.1rem;">', unsafe_allow_html=True)
+    
+    st.markdown("### 🎧 聆听经文")
+    col1, col2 = st.columns([2, 1])
+    voice_choice = col1.selectbox("选择朗读声音", ["温和女声", "沉稳男声", "清脆童声"], label_visibility="collapsed")
+    if col2.button("加载/播放朗读"):
+        if not st.secrets.get("GCP_API_KEY") and not GEMINI_KEY:
+            st.error("请在 Secrets 中配置 API_KEY 以启用朗读功能。")
+        else:
+            combined_text = "".join(FULL_TEXT)
+            audio_b64 = get_cached_tts(voice_choice, combined_text)
+            if audio_b64:
+                audio_bytes = base64.b64decode(audio_b64)
+                st.audio(audio_bytes, format="audio/mp3")
+    
+    st.markdown("---")
+
     for para in FULL_TEXT:
         if para.strip():
             st.markdown(f"{para}  ")
