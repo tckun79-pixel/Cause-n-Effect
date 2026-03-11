@@ -14,11 +14,10 @@ except ImportError:
     FIREBASE_READY = False
 
 # ==========================================
-# 页面基础配置 (不再强制覆盖全局背景颜色)
+# 页面基础配置
 # ==========================================
 st.set_page_config(page_title="因果与功过格", page_icon="🍃")
 
-# 局部样式注入：仅针对特定卡片，不干扰全局文字颜色
 st.markdown("""
     <style>
     .zen-header { text-align: center; color: #4a3f31; padding: 20px; border-bottom: 1px solid #eee; }
@@ -48,7 +47,6 @@ def get_db():
 
 db = get_db()
 
-# 获取 Auth 必要的 Web Key
 WEB_KEY = st.secrets.get("FIREBASE_WEB_API_KEY", None)
 GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", None)
 
@@ -61,33 +59,14 @@ APP_ID = "karma_v1"
 if 'user' not in st.session_state: st.session_state.user = None
 
 KARMA_DATA = [
-    {
-        "keywords": ['投资', '股票', '期权', '交易', '财富', '赚钱', 'Wheel', '老虎证券', '盈透'],
-        "question": '问今生投资顺遂、财富稳健为何因？',
-        "verse": '无食无穿为何因。前世未舍半分文。富贵皆由命。前世各修因。',
-        "explanation": '在金融市场中，亏损往往源于贪婪与吝啬。保持客观理性的交易纪律，获利后随分布施，破除对金钱的过度执念，是财富长流的根本。'
-    },
-    {
-        "keywords": ['工作', '研发', '听力', '助听器', '医疗', '沟通', '测试', 'IT'],
-        "question": '问今生能以 IT 科技与医疗设备助人为何因？',
-        "verse": '今生健康为何因。前世施药救病人。今生聋哑为何因。前世恶口骂双亲。',
-        "explanation": '您从事助听器测试开发，这份工作能帮助他人恢复听力，本质上就是现代版的“施药救人”。严谨把控质量，本身就是积累善业。'
-    },
-    {
-        "keywords": ['孩子', '女儿', '教育', '学习', '读书', '小学'],
-        "question": '问今生子女乖巧、聪明好学为何因？',
-        "verse": '聪明智慧为何因。前世诵经念佛人。多子多孙为何因。前世开笼放鸟人。',
-        "explanation": '期望女儿聪慧，父母需言传身教。在家中营造平静理性的求知氛围，耐心辅导，能为孩子培植深厚的智慧善根。'
-    },
-    {
-        "keywords": ['长寿', '健康', '无病', '素食', '吃素', '蛋奶素'],
-        "question": '问今生健康长寿、坚持素食为何因？',
-        "verse": '今生长寿为何因。前世买物多放生。今生短命是何因。前世宰杀众生身。',
-        "explanation": '坚持蛋奶素、不食五辛，在日常生活中就是一种持续的“护生”。不与众生结怨，自然感得健康平安的果报。'
-    }
+    {"keywords": ['投资', '股票', '期权', '交易', '财富', 'Wheel'], "question": '问今生投资顺遂、财富稳健为何因？', "verse": '无食无穿为何因。前世未舍半分文。富贵皆由命。前世各修因。', "explanation": '在金融市场中，亏损往往源于贪婪与吝啬。保持客观理性的交易纪律，获利后随分布施，是财富长流的根本。'},
+    {"keywords": ['工作', '研发', '听力', '助听器', '医疗', '沟通', '测试', 'IT'], "question": '问今生能以 IT 科技与医疗设备助人为何因？', "verse": '今生健康为何因。前世施药救病人。今生聋哑为何因。前世恶口骂双亲。', "explanation": '您从事助听器测试开发，这份工作能帮助他人恢复听力，本质上就是现代版的“施药救人”。'},
+    {"keywords": ['孩子', '女儿', '教育', '学习', '读书', '小学'], "question": '问今生子女乖巧、聪明好学为何因？', "verse": '聪明智慧为何因。前世诵经念佛人。多子多孙为何因。前世开笼放鸟人。', "explanation": '耐心辅导7岁女儿，能为孩子培植深厚的智慧善根。'},
+    {"keywords": ['长寿', '健康', '无病', '素食', '吃素', '蛋奶素'], "question": '问今生健康长寿、坚持素食为何因？', "verse": '今生长寿为何因。前世买物多放生。今生短命是何因。前世宰杀众生身。', "explanation": '坚持蛋奶素、不食五辛，在日常生活中就是一种持续的“护生”。'}
 ]
 
-FULL_TEXT = [
+# 原始带句号的版本，用于喂给 TTS 保证朗读有自然的停顿
+FULL_TEXT_ORIGINAL = [
     "尔时。阿难陀尊者。在灵山会上。一千二百五十人俱。阿难顶礼合掌。绕佛三匝。胡跪合掌。请问本师释迦牟尼佛。南阎浮提。一切众生。末法时至。多生不善。不敬三宝。不重父母。无有三纲。五伦杂乱。贫穷下贱。六根不足。终日杀生害命。富贵贫穷。亦不平等。是何果报。望世尊慈悲。愿为弟子一一解说。",
     "佛告阿难。与诸大弟子言。善哉。善哉。汝等谛听。吾当为汝等分明说之。一切世间。男女老少。贫贱富贵。受苦无穷。享福不尽。皆是前生因果之报。以何所作故。先须孝敬父母。次要敬信三宝。三要戒杀放生。四要念佛布施。能种后世福田。",
     "佛说因果偈。云。",
@@ -129,40 +108,21 @@ FULL_TEXT = [
     "若问前生事。今生受者是。若问后世事。今生做者是。"
 ]
 
+# 视觉展示版：将句号全部替换为空格
+FULL_TEXT_DISPLAY = [para.replace("。", " ") for para in FULL_TEXT_ORIGINAL]
+
 def search_karma(query):
     query = query.lower().strip()
     if not query: return None
     for item in KARMA_DATA:
         if any(kw in query for kw in item['keywords']) or query in item['question']:
             return item
-    return {"question": f"关于“{query}”的参悟", "verse": "欲知前世因。今生受者是。欲知来世果。今生作者是。", "explanation": "存善心、行善事，就是为未来种下善因。若需更深解析，可前往【大师开示】标签页请教。"}
-
-def call_ai_master(prompt, use_background=False):
-    if not GEMINI_KEY:
-        return "❌ 缺少 Gemini API 密钥配置。"
-    
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}"
-    
-    bg_instruction = "结合用户(新加坡, IT/助听器, 期权交易, 7岁女儿, 蛋奶素)等背景进行理性映射。" if use_background else "仅针对用户当前的问题进行客观解答，不要生搬硬套任何未经提及的个人背景。"
-    
-    system_instruction = f"""精通佛教《三世因果经》的智者。严格遵守：
-    1. 依据核心原理，使用简体中文。
-    2. 客观中立。{bg_instruction}不宣扬迷信。
-    3. 第一部分引用原句，第二部分给出白话解析。"""
-    
-    payload = {"contents": [{"parts": [{"text": prompt}]}], "systemInstruction": {"parts": [{"text": system_instruction}]}}
-    try:
-        response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
-        if not response.ok: return f"❌ API 拒绝: {response.status_code}"
-        return response.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "大师沉默。")
-    except Exception as e:
-        return f"❌ 网络错误：{str(e)}"
+    return {"question": f"关于“{query}”的参悟", "verse": "欲知前世因 今生受者是 欲知来世果 今生作者是 ", "explanation": "存善心、行善事，就是为未来种下善因。若需更深解析，可前往【大师开示】标签页请教。"}
 
 # ==========================================
 # 朗读功能 (TTS)
 # ==========================================
 def synthesize_speech(text, voice_preset):
-    # 优先使用专门的 GCP_API_KEY，如果没有则尝试复用 GEMINI_KEY
     api_key = st.secrets.get("GCP_API_KEY", GEMINI_KEY)
     if not api_key: return None
 
@@ -175,12 +135,9 @@ def synthesize_speech(text, voice_preset):
     }
     conf = presets.get(voice_preset, presets["温和女声"])
 
-    # 将长文本切分为小块 (每块约 300 字)，防止触发 Google API 的 5000 字节限制和 500 内部错误
     chunk_size = 300
     chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
-    
     combined_audio_bytes = b""
-    
     progress_bar = st.progress(0)
     status_text = st.empty()
     
@@ -211,7 +168,6 @@ def synthesize_speech(text, voice_preset):
             
     status_text.empty()
     progress_bar.empty()
-    
     return base64.b64encode(combined_audio_bytes).decode('utf-8')
 
 def get_cached_tts(voice_preset, full_text):
@@ -227,12 +183,27 @@ def get_cached_tts(voice_preset, full_text):
     audio_b64 = synthesize_speech(full_text, voice_preset)
     if audio_b64:
         try:
-            # Firestore 限制单文档最大为 1MB。如果超限，try-except 会捕捉异常，
-            # 保证用户本次能正常听完整语音 (只是暂不缓存)
             cache_ref.set({"audio_b64": audio_b64, "timestamp": firestore.SERVER_TIMESTAMP})
         except:
             pass
     return audio_b64
+
+def call_ai_master(prompt, use_background=False):
+    if not GEMINI_KEY:
+        return "❌ 缺少 Gemini API 密钥配置。"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}"
+    bg_instruction = "结合用户(新加坡, IT/助听器, 期权交易, 7岁女儿, 蛋奶素)等背景进行理性映射。" if use_background else "仅针对用户当前的问题进行客观解答，不要生搬硬套任何未经提及的个人背景。"
+    system_instruction = f"""精通佛教《三世因果经》的智者。严格遵守：
+    1. 依据核心原理，使用简体中文。
+    2. 客观中立。{bg_instruction}不宣扬迷信。
+    3. 第一部分引用原句，第二部分给出白话解析。"""
+    payload = {"contents": [{"parts": [{"text": prompt}]}], "systemInstruction": {"parts": [{"text": system_instruction}]}}
+    try:
+        response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+        if not response.ok: return f"❌ API 拒绝: {response.status_code}"
+        return response.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "大师沉默。")
+    except Exception as e:
+        return f"❌ 网络错误：{str(e)}"
 
 # ==========================================
 # 认证函数
@@ -241,14 +212,12 @@ def auth_gate(key):
     if not WEB_KEY:
         st.error("Secrets 中缺少 FIREBASE_WEB_API_KEY，无法登录。")
         return False
-    
     if not st.session_state.user:
         with st.container(border=True):
             st.subheader("🔑 功过格私密登录")
             mode = st.toggle("已有账号 / 注册新账号", value=False, key=f"mode_{key}")
             email = st.text_input("邮箱", key=f"e_{key}")
             pwd = st.text_input("密码", type="password", key=f"p_{key}")
-            
             if st.button("确定进入", key=f"b_{key}", type="primary"):
                 action = "signUp" if mode else "signInWithPassword"
                 url = f"https://identitytoolkit.googleapis.com/v1/accounts:{action}?key={WEB_KEY}"
@@ -309,13 +278,10 @@ with tabs[0]:
 with tabs[1]:
     if auth_gate("gg"):
         uid = st.session_state.user["uid"]
-        
-        # 1. 获取类别设置
         settings_ref = db.collection("artifacts").document(APP_ID).collection("users").document(uid).collection("settings").document("categories")
         doc = settings_ref.get()
         user_cats = doc.to_dict().get("list", DEFAULT_CATS) if doc.exists else DEFAULT_CATS
         
-        # 2. 类别管理
         with st.expander("⚙️ 类别自定义"):
             new_c = st.text_input("新增类别")
             if st.button("添加类别") and new_c:
@@ -329,7 +295,6 @@ with tabs[1]:
                 settings_ref.set({"list": DEFAULT_CATS})
                 st.rerun()
 
-        # 3. 记录
         st.markdown("---")
         with st.form("gg_log", clear_on_submit=True):
             c1, c2 = st.columns([3, 1])
@@ -345,7 +310,6 @@ with tabs[1]:
                 })
                 st.success("已登记")
 
-        # 4. 展示
         st.markdown("### 📜 历史记录")
         try:
             recs = db.collection("artifacts").document(APP_ID).collection("public").document("data").collection("gong_guo").where("uid", "==", uid).order_by("server_time", direction=firestore.Query.DESCENDING).limit(10).stream()
@@ -383,31 +347,28 @@ with tabs[3]:
         if not st.secrets.get("GCP_API_KEY") and not GEMINI_KEY:
             st.error("请在 Secrets 中配置 API_KEY 以启用朗读功能。")
         else:
-            combined_text = "".join(FULL_TEXT)
+            # TTS 发音依然使用带句号的原版文本，保证节奏自然
+            combined_text = "".join(FULL_TEXT_ORIGINAL)
             audio_b64 = get_cached_tts(voice_choice, combined_text)
             
             if audio_b64:
-                # ==========================================
-                # 前端 JS 注入：实现基于时间比例的文字同步高亮
-                # ==========================================
-                
-                # 1. 将经文每个字用 span 包裹
+                # 页面展示使用空格版，高亮字符数依然一一对应
                 wrapped_text_html = ""
-                for para in FULL_TEXT:
+                for para in FULL_TEXT_DISPLAY:
                     if para.strip():
                         wrapped_text_html += "<p>"
                         for char in para:
-                            wrapped_text_html += f"<span class='tts-char'>{char}</span>"
+                            # 将空格用 &nbsp; 替换，保证网页渲染时宽度稳定
+                            display_char = "&nbsp;&nbsp;" if char == " " else char
+                            wrapped_text_html += f"<span class='tts-char'>{display_char}</span>"
                         wrapped_text_html += "</p>"
 
-                # 2. 构建包含播放器和同步逻辑的完整 HTML
                 sync_html = f"""
                 <style>
                     .tts-player-container {{ margin-bottom: 20px; }}
                     audio {{ width: 100%; outline: none; border-radius: 8px; }}
-                    .tts-text-box {{ font-family: 'Noto Serif SC', serif; font-size: 1.15rem; line-height: 2.0; color: #4a3f31; padding: 10px; }}
-                    .tts-char {{ transition: color 0.1s; }}
-                    /* 高亮样式：深橙色文字，配浅色背景烘托 */
+                    .tts-text-box {{ font-family: 'Noto Serif SC', serif; font-size: 1.15rem; line-height: 2.0; color: #4a3f31; padding: 10px; word-break: break-all; }}
+                    .tts-char {{ transition: color 0.1s; display: inline-block; }}
                     .highlighted {{ color: #d84315; font-weight: bold; background-color: #fbe9e7; border-radius: 2px; }}
                 </style>
                 
@@ -425,12 +386,9 @@ with tabs[3]:
 
                     audio.addEventListener('timeupdate', () => {{
                         if (audio.duration) {{
-                            // 计算播放进度百分比
                             const progress = audio.currentTime / audio.duration;
-                            // 线性估算当前读到的字数索引
                             const targetIndex = Math.floor(progress * totalChars);
 
-                            // 遍历所有的字，点亮进度之前的字
                             spans.forEach((span, index) => {{
                                 if (index <= targetIndex) {{
                                     span.classList.add('highlighted');
@@ -442,13 +400,11 @@ with tabs[3]:
                     }});
                 </script>
                 """
-                
-                # 在 Streamlit 中渲染这块带有 JS 的 HTML (提供足够的高度以防滚动)
                 components.html(sync_html, height=800, scrolling=True)
     else:
-        # 默认静态显示经文
         st.markdown("---")
-        for para in FULL_TEXT:
+        # 静态模式展示空格版本
+        for para in FULL_TEXT_DISPLAY:
             if para.strip():
                 st.markdown(f"{para}  ")
                 
