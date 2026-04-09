@@ -328,7 +328,7 @@ with tabs[1]:
         try:
             resp_recs = (
                 supabase.table("gong_guo")
-                .select("cat, pts, type, time, id")
+                .select("cat, pts, type, time, id, memo")
                 .eq("uid", uid)
                 .order("created_at", desc=True)
                 .limit(10)
