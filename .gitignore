@@ -1,0 +1,3 @@
+# Supabase / app secrets — never commit
+.streamlit/secrets.toml
+__pycache__/

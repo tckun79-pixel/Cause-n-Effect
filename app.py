@@ -1,17 +1,8 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import requests
-import json
 import base64
 from datetime import datetime
-
-# 1. 尝试导入并检查依赖
-try:
-    import firebase_admin
-    from firebase_admin import credentials, firestore
-    FIREBASE_READY = True
-except ImportError:
-    FIREBASE_READY = False
 
 # ==========================================
 # 页面基础配置
@@ -28,26 +19,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 核心初始化与安全检查
+# Supabase 初始化
 # ==========================================
 @st.cache_resource
-def get_db():
-    if not FIREBASE_READY or "firebase" not in st.secrets:
+def get_supabase():
+    """Connect to Supabase using secrets or environment variables."""
+    supabase_url = st.secrets.get("supabase_url") or "https://xqatmutydxsxvrgnuwgm.supabase.co"
+    supabase_key = st.secrets.get("supabase_key") or st.secrets.get("SUPABASE_KEY")
+    if not supabase_key:
+        st.sidebar.error("缺少 supabase_key，请检查 .streamlit/secrets.toml")
         return None
-    try:
-        if not firebase_admin._apps:
-            fb_conf = dict(st.secrets["firebase"])
-            fb_conf["private_key"] = fb_conf["private_key"].replace("\\n", "\n")
-            cred = credentials.Certificate(fb_conf)
-            firebase_admin.initialize_app(cred)
-        return firestore.client()
-    except Exception as e:
-        st.sidebar.error(f"DB初始化异常: {e}")
-        return None
+    from supabase import create_client
+    return create_client(supabase_url, supabase_key)
 
-db = get_db()
+supabase = get_supabase()
 
-WEB_KEY = st.secrets.get("FIREBASE_WEB_API_KEY", None)
+# ==========================================
+# Firebase Auth (kept — separate from DB layer)
+# ==========================================
+WEB_KEY   = st.secrets.get("FIREBASE_WEB_API_KEY", None)
 GEMINI_KEY = st.secrets.get("GEMINI_API_KEY", None)
 
 # ==========================================
@@ -60,9 +50,9 @@ if 'user' not in st.session_state: st.session_state.user = None
 
 KARMA_DATA = [
     {"keywords": ['投资', '股票', '期权', '交易', '财富', 'Wheel'], "question": '问今生投资顺遂、财富稳健为何因？', "verse": '无食无穿为何因。前世未舍半分文。富贵皆由命。前世各修因。', "explanation": '在金融市场中，亏损往往源于贪婪与吝啬。保持客观理性的交易纪律，获利后随分布施，是财富长流的根本。'},
-    {"keywords": ['工作', '研发', '听力', '助听器', '医疗', '沟通', '测试', 'IT'], "question": '问今生能以 IT 科技与医疗设备助人为何因？', "verse": '今生健康为何因。前世施药救病人。今生聋哑为何因。前世恶口骂双亲。', "explanation": '您从事助听器测试开发，这份工作能帮助他人恢复听力，本质上就是现代版的“施药救人”。'},
+    {"keywords": ['工作', '研发', '听力', '助听器', '医疗', '沟通', '测试', 'IT'], "question": '问今生能以 IT 科技与医疗设备助人为何因？', "verse": '今生健康为何因。前世施药救病人。今生聋哑为何因。前世恶口骂双亲。', "explanation": '您从事助听器测试开发，这份工作能帮助他人恢复听力，本质上就是现代版的"施药救人"。'},
     {"keywords": ['孩子', '女儿', '教育', '学习', '读书', '小学'], "question": '问今生子女乖巧、聪明好学为何因？', "verse": '聪明智慧为何因。前世诵经念佛人。多子多孙为何因。前世开笼放鸟人。', "explanation": '耐心辅导7岁女儿，能为孩子培植深厚的智慧善根。'},
-    {"keywords": ['长寿', '健康', '无病', '素食', '吃素', '蛋奶素'], "question": '问今生健康长寿、坚持素食为何因？', "verse": '今生长寿为何因。前世买物多放生。今生短命是何因。前世宰杀众生身。', "explanation": '坚持蛋奶素、不食五辛，在日常生活中就是一种持续的“护生”。'}
+    {"keywords": ['长寿', '健康', '无病', '素食', '吃素', '蛋奶素'], "question": '问今生健康长寿、坚持素食为何因？', "verse": '今生长寿为何因。前世买物多放生。今生短命是何因。前世宰杀众生身。', "explanation": '坚持蛋奶素、不食五辛，在日常生活中就是一种持续的"护生"。'}
 ]
 
 FULL_TEXT_ORIGINAL = [
@@ -113,24 +103,17 @@ def search_karma(query):
     query = query.lower().strip()
     if not query: return None
 
-    # Fix 5: Token-level keyword matching — split query into tokens and
-    # require each token to appear as a distinct word boundary match within
-    # keywords, avoiding substring collisions (e.g. "鱼" inside "期权").
     query_tokens = set(query.split())
-
     for item in KARMA_DATA:
-        # Token-level match: each query token must be contained by at least
-        # one keyword when token boundaries are respected.
         token_match = any(
             any(qt in kw for kw in item["keywords"])
             for qt in query_tokens
         )
-        # Also allow exact question substring match (whole-string, not partial)
         question_match = query in item["question"]
         if token_match or question_match:
             return item
 
-    return {"question": f"关于“{query}”的参悟", "verse": "欲知前世因 今生受者是 欲知来世果 今生作者是 ", "explanation": "存善心、行善事，就是为未来种下善因。若需更深解析，可前往【大师开示】标签页请教。"}
+    return {"question": f'关于"{query}"的参悟', "verse": "欲知前世因 今生受者是 欲知来世果 今生作者是 ", "explanation": "存善心、行善事，就是为未来种下善因。若需更深解析，可前往【大师开示】标签页请教。"}
 
 # ==========================================
 # 朗读功能 (TTS)
@@ -153,7 +136,7 @@ def synthesize_speech(text, voice_preset):
     combined_audio_bytes = b""
     progress_bar = st.progress(0)
     status_text = st.empty()
-    
+
     for i, chunk in enumerate(chunks):
         status_text.text(f"大师正在诵读... ({i+1}/{len(chunks)})")
         payload = {
@@ -161,7 +144,6 @@ def synthesize_speech(text, voice_preset):
             "voice": {"languageCode": "cmn-CN", "name": conf["name"]},
             "audioConfig": {"audioEncoding": "MP3", "pitch": conf["pitch"], "speakingRate": conf["rate"]}
         }
-
         try:
             res = requests.post(url, json=payload)
             if res.ok:
@@ -178,32 +160,27 @@ def synthesize_speech(text, voice_preset):
             status_text.empty()
             progress_bar.empty()
             return None
-            
+
     status_text.empty()
     progress_bar.empty()
     return base64.b64encode(combined_audio_bytes).decode('utf-8')
 
+
 def get_cached_tts(voice_preset, full_text):
-    if not db: 
-        return synthesize_speech(full_text, voice_preset)
-        
-    cache_ref = db.collection("artifacts").document(APP_ID).collection("public").document("data").collection("tts_cache").document(voice_preset)
-    doc = cache_ref.get()
-    if doc.exists:
-        return doc.to_dict().get("audio_b64")
+    if supabase:
+        resp = supabase.table("tts_cache").select("audio_b64").eq("voice_preset", voice_preset).maybe_single().execute()
+        if resp and resp.data:
+            return resp.data["audio_b64"]
 
     st.info("首次生成该声音的音频，正在调用 Google Cloud TTS，请稍候...")
     audio_b64 = synthesize_speech(full_text, voice_preset)
-    if audio_b64:
-        try:
-            cache_ref.set({"audio_b64": audio_b64, "timestamp": firestore.SERVER_TIMESTAMP})
-        except:
-            pass
+    if audio_b64 and supabase:
+        supabase.table("tts_cache").upsert({"voice_preset": voice_preset, "audio_b64": audio_b64}).execute()
     return audio_b64
 
+
 def sanitize_prompt(text):
-    """Fix 6: Strip control chars and length-cap user input before injection."""
-    # Remove control characters (newline, tab, etc.) to prevent prompt injection
+    """Strip control chars and length-cap user input before injection."""
     cleaned = ''.join(ch for ch in text if ord(ch) >= 32 or ch in '\n')
     return cleaned[:2000]
 
@@ -211,7 +188,6 @@ def sanitize_prompt(text):
 def call_ai_master(prompt, use_background=False):
     if not GEMINI_KEY:
         return "❌ 缺少 Gemini API 密钥配置。"
-    # Fix 6: Sanitise user input before it enters the prompt
     prompt = sanitize_prompt(prompt)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}"
     bg_instruction = "结合用户(新加坡, IT/助听器, 期权交易, 7岁女儿, 蛋奶素)等背景进行理性映射。" if use_background else "仅针对用户当前的问题进行客观解答，不要生搬硬套任何未经提及的个人背景。"
@@ -228,7 +204,7 @@ def call_ai_master(prompt, use_background=False):
         return f"❌ 网络错误：{str(e)}"
 
 # ==========================================
-# 认证函数
+# 认证函数 (Firebase — separate from DB)
 # ==========================================
 RECAPTCHA_SITE_KEY = st.secrets.get("RECAPTCHA_SITE_KEY", None)
 
@@ -238,7 +214,6 @@ def auth_gate(key):
         st.error("Secrets 中缺少 FIREBASE_WEB_API_KEY，无法登录。")
         return False
 
-    # Show logout success message if set
     if st.session_state.get("logout_message"):
         st.success(st.session_state.logout_message)
         del st.session_state["logout_message"]
@@ -250,12 +225,10 @@ def auth_gate(key):
             email = st.text_input("邮箱", key=f"e_{key}")
             pwd = st.text_input("密码", type="password", key=f"p_{key}")
 
-            # Fix 2: Password strength gate on sign-up
             if mode and pwd and len(pwd) < 8:
                 st.warning("注册密码至少需要 8 个字符。")
 
             if st.button("确定进入", key=f"b_{key}", type="primary"):
-                # Fix 2: Block sign-up with weak password
                 if mode and len(pwd) < 8:
                     st.error("注册密码至少需要 8 个字符。")
                 else:
@@ -273,6 +246,7 @@ def auth_gate(key):
                         st.error(f"连接异常: {e}")
         return False
     return True
+
 
 def logout():
     st.session_state.user = None
@@ -307,7 +281,7 @@ with tabs[0]:
         st.markdown(f'''
             <div class="verse-card">
                 <h4 style="color:#4a3f31;">{res["question"]}</h4>
-                <p style="font-size: 1.2em; color: #635540; font-weight: bold;">“ {res["verse"]} ”</p>
+                <p style="font-size: 1.2em; color: #635540; font-weight: bold;">" {res["verse"]} "</p>
                 <div style="color: #5c4f3c; text-align: left; margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
                     <b>现代启示：</b><br>{res["explanation"]}
                 </div>
@@ -316,23 +290,24 @@ with tabs[0]:
 
 # --------- 标签 2: 功过格 ---------
 with tabs[1]:
-    if auth_gate("gg"):
+    if auth_gate("gg") and supabase:
         uid = st.session_state.user["uid"]
-        settings_ref = db.collection("artifacts").document(APP_ID).collection("users").document(uid).collection("settings").document("categories")
-        doc = settings_ref.get()
-        user_cats = doc.to_dict().get("list", DEFAULT_CATS) if doc.exists else DEFAULT_CATS
-        
+
+        # Load custom categories
+        resp_cats = supabase.table("categories").select("list").eq("uid", uid).maybe_single().execute()
+        user_cats = resp_cats.data["list"] if resp_cats and resp_cats.data else DEFAULT_CATS
+
         with st.expander("⚙️ 类别自定义"):
             new_c = st.text_input("新增类别")
             if st.button("添加类别") and new_c:
                 if new_c not in user_cats:
                     user_cats.append(new_c)
-                    settings_ref.set({"list": user_cats})
+                    supabase.table("categories").upsert({"uid": uid, "list": user_cats, "updated_at": datetime.now().isoformat()}).execute()
                     st.rerun()
             st.write("当前监控项：")
             st.write(", ".join(user_cats))
             if st.button("恢复默认"):
-                settings_ref.set({"list": DEFAULT_CATS})
+                supabase.table("categories").upsert({"uid": uid, "list": DEFAULT_CATS, "updated_at": datetime.now().isoformat()}).execute()
                 st.rerun()
 
         st.markdown("---")
@@ -343,25 +318,35 @@ with tabs[1]:
             cat = st.selectbox("类别", user_cats)
             memo = st.text_area("事迹细节 (如：期权止损坚决、耐心辅导女儿)")
             if st.form_submit_button("登入功过册", type="primary"):
-                db.collection("artifacts").document(APP_ID).collection("public").document("data").collection("gong_guo").add({
+                supabase.table("gong_guo").insert({
                     "uid": uid, "cat": cat, "memo": memo, "pts": pts if is_gong else -pts,
-                    "type": "gong" if is_gong else "guo", "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "server_time": firestore.SERVER_TIMESTAMP
-                })
+                    "type": "gong" if is_gong else "guo", "time": datetime.now().strftime("%Y-%m-%d %H:%M")
+                }).execute()
                 st.success("已登记")
 
         st.markdown("### 📜 历史记录")
         try:
-            recs = db.collection("artifacts").document(APP_ID).collection("public").document("data").collection("gong_guo").where("uid", "==", uid).order_by("server_time", direction=firestore.Query.DESCENDING).limit(10).stream()
+            resp_recs = (
+                supabase.table("gong_guo")
+                .select("cat, pts, type, time, id")
+                .eq("uid", uid)
+                .order("created_at", desc=True)
+                .limit(10)
+                .execute()
+            )
+            records = resp_recs.data if resp_recs else []
             total = 0
-            for r in recs:
-                d = r.to_dict()
+            for d in records:
                 cls = "gong-item" if d["type"] == "gong" else "guo-item"
                 st.markdown(f'<div class="{cls}"><b>{d["cat"]} ({d["pts"]}分)</b><br><small>{d["time"]}</small><br>{d["memo"]}</div>', unsafe_allow_html=True)
                 total += d["pts"]
-            st.sidebar.metric("累计功过分", total)
-        except:
-            st.info("数据加载中，若长时间不显示请检查 Firebase 索引。")
+            if records:
+                st.sidebar.metric("累计功过分", total)
+        except Exception as e:
+            st.info(f"数据加载中，若长时间不显示请检查 Supabase 连接。错误: {e}")
+
+    elif not supabase:
+        st.warning("Supabase 未配置，无法使用功过格功能。请检查 secrets.toml。")
 
 # --------- 标签 3: 大师开示 ---------
 with tabs[2]:
@@ -378,19 +363,18 @@ with tabs[2]:
 # --------- 标签 4: 经文 ---------
 with tabs[3]:
     st.markdown('<div class="verse-card" style="text-align: left; line-height: 2.0; font-size: 1.1rem;">', unsafe_allow_html=True)
-    
+
     st.markdown("### 🎧 聆听经文")
-    # 恢复两列布局，因为调速框被移到了底层的播放器内部
     col1, col2 = st.columns([2, 1])
     voice_choice = col1.selectbox("选择朗读声音", ["温和女声", "沉稳男声", "清脆童声"], label_visibility="collapsed")
-    
+
     if col2.button("加载/播放朗读"):
         if not st.secrets.get("GCP_API_KEY") and not GEMINI_KEY:
             st.error("请在 Secrets 中配置 API_KEY 以启用朗读功能。")
         else:
             combined_text = "".join(FULL_TEXT_ORIGINAL)
             audio_b64 = get_cached_tts(voice_choice, combined_text)
-            
+
             if audio_b64:
                 wrapped_text_html = ""
                 for para in FULL_TEXT_DISPLAY:
@@ -401,7 +385,6 @@ with tabs[3]:
                             wrapped_text_html += f"<span class='tts-char'>{display_char}</span>"
                         wrapped_text_html += "</p>"
 
-                # 核心升级：在 HTML 中原生注入速度控制下拉框和对应的 JS 监听器
                 sync_html = f"""
                 <style>
                     .player-wrapper {{ background: #fcfaf7; padding: 15px; border-radius: 8px; border: 1px solid #f5f0e6; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }}
@@ -412,7 +395,7 @@ with tabs[3]:
                     .tts-char {{ transition: color 0.1s; display: inline-block; }}
                     .highlighted {{ color: #d84315; font-weight: bold; background-color: #fbe9e7; border-radius: 2px; }}
                 </style>
-                
+
                 <div class="player-wrapper">
                     <div class="controls-row">
                         <span style="color: #6b5c4a; font-size: 0.9rem;">实时播放速度:</span>
@@ -425,28 +408,25 @@ with tabs[3]:
                     </div>
                     <audio id="audio-player" controls autoplay src="data:audio/mp3;base64,{audio_b64}"></audio>
                 </div>
-                
+
                 <div class="tts-text-box" id="text-container">
                     {wrapped_text_html}
                 </div>
-                
+
                 <script>
                     const audio = document.getElementById('audio-player');
                     const speedSelector = document.getElementById('speed-selector');
                     const spans = document.querySelectorAll('.tts-char');
                     const totalChars = spans.length;
 
-                    // 监听下拉框变化，实时无缝调整音频速度
                     speedSelector.addEventListener('change', (e) => {{
                         audio.playbackRate = parseFloat(e.target.value);
                     }});
 
-                    // 监听播放进度，同步文字高亮
                     audio.addEventListener('timeupdate', () => {{
                         if (audio.duration) {{
                             const progress = audio.currentTime / audio.duration;
                             const targetIndex = Math.floor(progress * totalChars);
-
                             spans.forEach((span, index) => {{
                                 if (index <= targetIndex) {{
                                     span.classList.add('highlighted');
@@ -455,6 +435,10 @@ with tabs[3]:
                                 }}
                             }});
                         }}
+                    }});
+
+                    audio.addEventListener('loadedmetadata', () => {{
+                        spans.forEach(span => span.classList.remove('highlighted'));
                     }});
                 </script>
                 """
