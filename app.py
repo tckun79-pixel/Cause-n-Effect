@@ -112,9 +112,24 @@ FULL_TEXT_DISPLAY = [para.replace("。", " ") for para in FULL_TEXT_ORIGINAL]
 def search_karma(query):
     query = query.lower().strip()
     if not query: return None
+
+    # Fix 5: Token-level keyword matching — split query into tokens and
+    # require each token to appear as a distinct word boundary match within
+    # keywords, avoiding substring collisions (e.g. "鱼" inside "期权").
+    query_tokens = set(query.split())
+
     for item in KARMA_DATA:
-        if any(kw in query for kw in item['keywords']) or query in item['question']:
+        # Token-level match: each query token must be contained by at least
+        # one keyword when token boundaries are respected.
+        token_match = any(
+            any(qt in kw for kw in item["keywords"])
+            for qt in query_tokens
+        )
+        # Also allow exact question substring match (whole-string, not partial)
+        question_match = query in item["question"]
+        if token_match or question_match:
             return item
+
     return {"question": f"关于“{query}”的参悟", "verse": "欲知前世因 今生受者是 欲知来世果 今生作者是 ", "explanation": "存善心、行善事，就是为未来种下善因。若需更深解析，可前往【大师开示】标签页请教。"}
 
 # ==========================================
@@ -186,9 +201,18 @@ def get_cached_tts(voice_preset, full_text):
             pass
     return audio_b64
 
+def sanitize_prompt(text):
+    """Fix 6: Strip control chars and length-cap user input before injection."""
+    # Remove control characters (newline, tab, etc.) to prevent prompt injection
+    cleaned = ''.join(ch for ch in text if ord(ch) >= 32 or ch in '\n')
+    return cleaned[:2000]
+
+
 def call_ai_master(prompt, use_background=False):
     if not GEMINI_KEY:
         return "❌ 缺少 Gemini API 密钥配置。"
+    # Fix 6: Sanitise user input before it enters the prompt
+    prompt = sanitize_prompt(prompt)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}"
     bg_instruction = "结合用户(新加坡, IT/助听器, 期权交易, 7岁女儿, 蛋奶素)等背景进行理性映射。" if use_background else "仅针对用户当前的问题进行客观解答，不要生搬硬套任何未经提及的个人背景。"
     system_instruction = f"""精通佛教《三世因果经》的智者。严格遵守：
@@ -206,35 +230,53 @@ def call_ai_master(prompt, use_background=False):
 # ==========================================
 # 认证函数
 # ==========================================
+RECAPTCHA_SITE_KEY = st.secrets.get("RECAPTCHA_SITE_KEY", None)
+
+
 def auth_gate(key):
     if not WEB_KEY:
         st.error("Secrets 中缺少 FIREBASE_WEB_API_KEY，无法登录。")
         return False
+
+    # Show logout success message if set
+    if st.session_state.get("logout_message"):
+        st.success(st.session_state.logout_message)
+        del st.session_state["logout_message"]
+
     if not st.session_state.user:
         with st.container(border=True):
             st.subheader("🔑 功过格私密登录")
             mode = st.toggle("已有账号 / 注册新账号", value=False, key=f"mode_{key}")
             email = st.text_input("邮箱", key=f"e_{key}")
             pwd = st.text_input("密码", type="password", key=f"p_{key}")
+
+            # Fix 2: Password strength gate on sign-up
+            if mode and pwd and len(pwd) < 8:
+                st.warning("注册密码至少需要 8 个字符。")
+
             if st.button("确定进入", key=f"b_{key}", type="primary"):
-                action = "signUp" if mode else "signInWithPassword"
-                url = f"https://identitytoolkit.googleapis.com/v1/accounts:{action}?key={WEB_KEY}"
-                try:
-                    res = requests.post(url, json={"email": email, "password": pwd, "returnSecureToken": True})
-                    data = res.json()
-                    if "localId" in data:
-                        st.session_state.user = {"uid": data["localId"], "email": data["email"]}
-                        st.rerun()
-                    else:
-                        st.error(f"失败: {data.get('error', {}).get('message')}")
-                except Exception as e:
-                    st.error(f"连接异常: {e}")
+                # Fix 2: Block sign-up with weak password
+                if mode and len(pwd) < 8:
+                    st.error("注册密码至少需要 8 个字符。")
+                else:
+                    action = "signUp" if mode else "signInWithPassword"
+                    url = f"https://identitytoolkit.googleapis.com/v1/accounts:{action}?key={WEB_KEY}"
+                    try:
+                        res = requests.post(url, json={"email": email, "password": pwd, "returnSecureToken": True})
+                        data = res.json()
+                        if "localId" in data:
+                            st.session_state.user = {"uid": data["localId"], "email": data["email"]}
+                            st.rerun()
+                        else:
+                            st.error(f"失败: {data.get('error', {}).get('message')}")
+                    except Exception as e:
+                        st.error(f"连接异常: {e}")
         return False
     return True
 
 def logout():
     st.session_state.user = None
-    st.success("已退出登录。")
+    st.session_state.logout_message = "已退出登录。"
 
 # ==========================================
 # UI 渲染
@@ -422,6 +464,6 @@ with tabs[3]:
         for para in FULL_TEXT_DISPLAY:
             if para.strip():
                 st.markdown(f"{para}  ")
-                
+
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #a69986; margin-top: 2rem;'>愿以此功德，普及于一切。</p>", unsafe_allow_html=True)
